@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>YouTube Phrase Timestamp Finder</title>
+<title>Transcript Phrase Timestamp Finder</title>
+
 <style>
 body {
   font-family: system-ui, sans-serif;
-  background: #111;
+  background: #0f0f0f;
   color: #eee;
   padding: 20px;
 }
@@ -18,7 +19,7 @@ textarea, input, button {
 }
 button {
   background: #4CAF50;
-  color: black;
+  color: #000;
   border: none;
   cursor: pointer;
 }
@@ -28,74 +29,95 @@ button {
   margin-top: 10px;
   border-radius: 6px;
 }
-a {
-  color: #4CAF50;
+.timestamp {
+  font-weight: bold;
+}
+mark {
+  background: #4CAF50;
+  color: black;
+}
+small {
+  color: #aaa;
 }
 </style>
 </head>
+
 <body>
 
-<h2>YouTube Phrase Timestamp Finder</h2>
+<h2>Transcript Phrase Timestamp Finder</h2>
 
-<label>YouTube URLs (one per line)</label>
-<textarea id="urls" rows="4"></textarea>
+<label>YouTube Video ID (optional, for clickable links)</label>
+<input id="videoId" placeholder="e.g. dQw4w9WgXcQ">
+
+<label>Transcript(s)</label>
+<textarea id="transcript" rows="12"
+placeholder="[00:12] Hello everyone...
+[00:18] Talking about AI
+
+--- VIDEO ---
+
+[01:02] Second video starts here"></textarea>
 
 <label>Word or Phrase</label>
-<input id="phrase" placeholder="e.g. artificial intelligence">
+<input id="phrase" placeholder="artificial intelligence">
 
-<button onclick="process()">Find Timestamps</button>
+<button onclick="findMatches()">Find Timestamps</button>
 
 <div id="output"></div>
 
 <script>
-async function process() {
-  const urls = document.getElementById("urls").value
-    .split("\n")
-    .map(u => u.trim())
-    .filter(Boolean);
-
-  const phrase = document.getElementById("phrase").value.toLowerCase();
+function findMatches() {
+  const transcriptText = document.getElementById("transcript").value;
+  const phrase = document.getElementById("phrase").value.trim();
+  const videoId = document.getElementById("videoId").value.trim();
   const output = document.getElementById("output");
+
   output.innerHTML = "";
+  if (!phrase) return;
 
-  for (const url of urls) {
-    const id = extractVideoId(url);
-    if (!id) continue;
+  const videos = transcriptText.split(/---\s*VIDEO\s*---/i);
+  const regexPhrase = new RegExp(phrase, "gi");
 
-    output.innerHTML += `<div class="result"><b>Video:</b> ${id}</div>`;
+  videos.forEach((video, index) => {
+    const lines = video.split("\n");
+    let foundAny = false;
 
-    try {
-      const res = await fetch(
-        `https://youtubetranscript.com/?format=json&id=${id}`
-      );
-      const transcript = await res.json();
+    lines.forEach(line => {
+      const match = line.match(/\[(\d+:\d+:\d+|\d+:\d+)\]\s*(.*)/);
+      if (!match) return;
 
-      transcript.forEach(line => {
-        if (line.text.toLowerCase().includes(phrase)) {
-          const time = Math.floor(line.start);
-          const minutes = Math.floor(time / 60);
-          const seconds = time % 60;
+      const time = match[1];
+      const text = match[2];
 
-          output.innerHTML += `
-            <div class="result">
-              ⏱ ${minutes}:${seconds.toString().padStart(2, "0")}
-              — <a target="_blank" href="https://youtu.be/${id}?t=${time}">
-              Jump</a><br>
-              <small>${line.text}</small>
-            </div>
-          `;
-        }
-      });
+      if (regexPhrase.test(text)) {
+        foundAny = true;
+        const highlighted = text.replace(regexPhrase, m => `<mark>${m}</mark>`);
+        const seconds = toSeconds(time);
 
-    } catch (e) {
-      output.innerHTML += `<div class="result">❌ Transcript unavailable</div>`;
+        const link = videoId
+          ? `https://youtu.be/${videoId}?t=${seconds}`
+          : null;
+
+        output.innerHTML += `
+          <div class="result">
+            <span class="timestamp">⏱ ${time}</span>
+            ${link ? `— <a target="_blank" href="${link}">Jump</a>` : ""}
+            <br>
+            <small>${highlighted}</small>
+          </div>
+        `;
+      }
+    });
+
+    if (foundAny && videos.length > 1) {
+      output.innerHTML += `<hr>`;
     }
-  }
+  });
 }
 
-function extractVideoId(url) {
-  const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
-  return match ? match[1] : null;
+function toSeconds(time) {
+  const parts = time.split(":").map(Number);
+  return parts.reduce((acc, val) => acc * 60 + val, 0);
 }
 </script>
 
